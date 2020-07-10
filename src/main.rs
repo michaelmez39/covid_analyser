@@ -1,4 +1,5 @@
 use plotters::prelude::*;
+use std::io::prelude::*;
 use serde::Deserialize;
 use std::fs::{read_dir, File};
 // Province_State,
@@ -16,6 +17,15 @@ struct DailyReport {
     Hospitalization_Rate: f64
 }
 
+#[derive(Debug)]
+enum AppError {
+    ConfigurationNotFound,
+    InvalidConfiguration,
+    InvalidData
+}
+
+type AppResult<T> = Result<T, AppError>;
+
 impl Default for DailyReport {
     fn default() -> Self {
         DailyReport {
@@ -28,32 +38,44 @@ impl Default for DailyReport {
         }
     }
 }
+
+#[derive(Deserialize)]
+struct Config {
+    state: String,
+    statistic: String,
+    datapath: String
+}
+
 impl std::cmp::PartialOrd for DailyReport {
     fn partial_cmp(&self, other: &DailyReport) -> Option<std::cmp::Ordering> {
         Some(self.Confirmed.cmp(&other.Confirmed))
     }
 }
 
+fn load_configuration() -> AppResult<Config> {
+    let mut config_file = File::open("config.toml").map_err(|x| AppError::ConfigurationNotFound)?;
+    let mut raw_config = String::new();
+    config_file.read_to_string(&mut raw_config).unwrap();
+    toml::from_str(&raw_config).map_err(|x| AppError::InvalidConfiguration)
+}
 // 6, 7, 8
 // confirmed, deaths, recovered
-fn main() -> std::io::Result<()> {
-    dotenv::dotenv().ok();
-    let state = std::env::var("US_STATE").expect("Please set US_STATE");
-    let state = state.trim();
-    let data_path = std::env::var("COVID_PATH")
-        .expect("Environment variable not set, please set COVID_PATH to data");
+fn main() -> AppResult<()> {
+    let config = load_configuration();
+    
+    let data_path = config.datapath;
     let mut confirmed: Vec<DailyReport> = Vec::new();
     let reports = read_dir(data_path).expect("COVID_PATH invalid");
     let mut num_reports = 0;
     for file in reports {
         if let Ok(d) = file {
             num_reports += 1;
-            let data = File::open(d.path())?;
+            let data = File::open(d.path()).map_err(|x| AppError::InvalidConfiguration)?;
             let mut rdr = csv::Reader::from_reader(data);
             confirmed.push(
                 rdr.deserialize()
                     .filter(|record: &Result<DailyReport, csv::Error>| {
-                        record.is_ok() && record.as_ref().unwrap().Province_State == state
+                        record.is_ok() && record.as_ref().unwrap().Province_State == config.state
                     })
                     .nth(0).unwrap_or(Ok(DailyReport::default())).unwrap()
             )
