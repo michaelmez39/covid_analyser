@@ -1,4 +1,9 @@
-[config]
-state="Florida"
-statistic="Deaths"
-datapath=
+state="Georgia"
+# Options
+#     - Confirmed
+#     - Deaths
+#     - Recovered
+#     - People_Tested
+#     - Hospitalization_Rate
+statistic="hospitalization_rate"
+datapath="COVID-19/csse_covid_19_data/csse_covid_19_daily_reports_us/"
